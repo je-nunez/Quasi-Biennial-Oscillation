@@ -1,11 +1,30 @@
 
 package mainapp
 
+import java.io.{File, FileOutputStream}
 
 import resource.managed
 
-import scala.collection.mutable.{HashMap => MutableHashMap}
+// scalastyle:off underscore.import
+import scala.collection.JavaConverters._
+// scalastyle:on underscore.import
+import scala.collection.mutable.{ArrayBuffer, HashMap => MutableHashMap}
 import scala.io.Source
+
+// a Graphing Library for Java to visualize the Quasi-Bienal-Oscillation time series (an
+// alternative for visualization could be JFreeChart)
+
+// scalastyle:off illegal.imports
+import java.awt.Color
+// scalastyle:on illegal.imports
+import de.erichseifert.gral.data.DataTable
+import de.erichseifert.gral.graphics.Label
+import de.erichseifert.gral.io.data.{DataWriter, DataWriterFactory}
+import de.erichseifert.gral.io.plots.DrawableWriterFactory
+import de.erichseifert.gral.plots.XYPlot
+import de.erichseifert.gral.plots.axes.LinearRenderer2D
+import de.erichseifert.gral.plots.points.DefaultPointRenderer2D
+import de.erichseifert.gral.util.GraphicsUtils
 
 import org.gephi.preview.plugin.renderers.EdgeRenderer
 
@@ -79,18 +98,70 @@ object qsBOsc {
     val timeYMs = tsWS.values.map(_.keys.toList).flatten.toList.distinct.sorted
     val sortedTsWs = tsWS.toSeq.sortBy(_._1)
 
+    val atmosphPressureToIndex = tsWS.keys.toList.sorted.zipWithIndex.toMap
+    val numAtmosphPressure = atmosphPressureToIndex.keys.size
+    val dataTable = new DataTable(numAtmosphPressure + 1, classOf[java.lang.Double])
+    dataTable.setName("Quasi-Bienal-Oscillation by date and atmospheric pressure")
+
     timeYMs foreach {
       case (timeYM) => {
+        val dataRow = ArrayBuffer.fill[java.lang.Double](numAtmosphPressure + 1)(0.0)
+
         print(timeYM)
         sortedTsWs.foreach {
           case (pressure, ts) => {
             val speed = if (ts.contains(timeYM)) ts(timeYM) else 0
             print(f"${pressure}%4s: ${speed}%4d")
+
+            val pressureColIndex = atmosphPressureToIndex(pressure) + 1   // column is shifted by 1
+            dataRow.update(pressureColIndex, 1.0 * speed)
           }
         }
         println
+        dataRow.update(0, timeYM.toDouble)     // the first entry in row is X-value (the time)
+        dataTable.add(dataRow.asJava)
       }
     }
+
+    // TODO: fix scales on horizontal X axis (with the time), and change each atmospheric pressure
+    //       to a different color.
+    // plotTimeSeriesByYear(dataTable)
+  }
+
+  def plotTimeSeriesByYear(dataTable: DataTable): Unit = {
+    // for debugging purposes only:
+    // val outputFile = new FileOutputStream(new File("/tmp/text.csv"))
+    // val dataWriter = DataWriterFactory.getInstance().get("text/csv")
+    // dataWriter.write(dataTable, outputFile)
+
+    val plot = new XYPlot(dataTable)
+    plot.getTitle().setText(dataTable.getName)
+    plot.setBackground(Color.WHITE)
+    plot.getPlotArea().setBackground(Color.WHITE)
+
+    val axisRendererX = plot.getAxisRenderer(XYPlot.AXIS_X)
+    val axisRendererY = plot.getAxisRenderer(XYPlot.AXIS_Y)
+    axisRendererX.setLabel(new Label("Time"))
+
+    val axisLabelY = new Label("Wind Speed (0.1m/s)")
+    axisLabelY.setRotation(90)
+    axisRendererY.setLabel(axisLabelY)
+
+    val defaultPointRenderer = new DefaultPointRenderer2D()
+    val color = new Color(255, 0, 0)
+    defaultPointRenderer.setColor(GraphicsUtils.deriveDarker(color))
+    defaultPointRenderer.setErrorVisible(false)
+    plot.setPointRenderers(dataTable, defaultPointRenderer)
+
+    val (saveImgWidth, saveImgHeight) = (1200, 1600)
+
+    plot.setBounds(0, 0, saveImgHeight, saveImgWidth)
+
+    val imgWriter = DrawableWriterFactory.getInstance().get("image/png")
+    imgWriter.write(plot,
+                    new FileOutputStream(new File("/tmp/quasiBienalOscillation.png")),
+                    saveImgHeight, saveImgWidth)
+
   }
 
   def parseSingaporeMeasures(): TimeSeriesWindSpeedByAtmosphPressure = {
