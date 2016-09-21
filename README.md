@@ -29,7 +29,7 @@ In the first version of this program, it has two reports, one of this has this h
 
       Reporting the Quasi-Bienal-Oscillation according to date first.
 
-and this is a sample of it, where the first column is the date of the sample, and the next columns are the list of pairs of **the atmospheric pressure** and its corresponding **wind speed in 0.1 meters/second units**.
+and this is a sample of it, where the first column is the date of the sample, and the next columns are the list of pairs of **the atmospheric pressure** and its corresponding **wind speed in 0.1 meters/second units** (a negative wind speed means that the wind is easterly, and a positive speed means the wind is westerly).
 
       Reporting the Quasi-Bienal-Oscillation according to date first.
       198701  10: -164  12: -300  15: -374  20: -326  25: -289  30: -260  35: -192  40:  -86  45:  -18  50:   39  60:  102  70:   57  80:   11  90:  -34 100:    0
