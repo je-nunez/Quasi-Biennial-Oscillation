@@ -1,6 +1,6 @@
 # Quasi-Biennial-Oscillation
 
-Parsing the Quasi-Biennial-Oscillation time series. The description of the time series is in the
+Analyzing the Quasi-Biennial-Oscillation time series. The description of the time series is in the
 Freie Universität Berlin at
 [http://www.geo.fu-berlin.de/en/met/ag/strat/produkte/qbo/](http://www.geo.fu-berlin.de/en/met/ag/strat/produkte/qbo/)
 
