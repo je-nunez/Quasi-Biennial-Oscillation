@@ -1,6 +1,7 @@
 
 package mainapp
 
+import java.lang.{Double => DoubleJava}
 import java.io.{File, FileOutputStream}
 
 import resource.managed
@@ -17,12 +18,13 @@ import scala.io.Source
 // scalastyle:off illegal.imports
 import java.awt.Color
 // scalastyle:on illegal.imports
-import de.erichseifert.gral.data.DataTable
-import de.erichseifert.gral.graphics.Label
+import de.erichseifert.gral.data.{AbstractDataSource, DataSeries, DataTable}
+import de.erichseifert.gral.graphics.{Insets2D, Label}
 import de.erichseifert.gral.io.data.{DataWriter, DataWriterFactory}
 import de.erichseifert.gral.io.plots.DrawableWriterFactory
 import de.erichseifert.gral.plots.XYPlot
 import de.erichseifert.gral.plots.axes.LinearRenderer2D
+import de.erichseifert.gral.plots.lines.{DefaultLineRenderer2D, LineRenderer}
 import de.erichseifert.gral.plots.points.DefaultPointRenderer2D
 import de.erichseifert.gral.util.GraphicsUtils
 
@@ -100,12 +102,12 @@ object qsBOsc {
 
     val atmosphPressureToIndex = tsWS.keys.toList.sorted.zipWithIndex.toMap
     val numAtmosphPressure = atmosphPressureToIndex.keys.size
-    val dataTable = new DataTable(numAtmosphPressure + 1, classOf[java.lang.Double])
+    val dataTable = new DataTable(numAtmosphPressure + 1, classOf[DoubleJava])
     dataTable.setName("Quasi-Bienal-Oscillation by date and atmospheric pressure")
 
     timeYMs foreach {
       case (timeYM) => {
-        val dataRow = ArrayBuffer.fill[java.lang.Double](numAtmosphPressure + 1)(0.0)
+        val dataRow = ArrayBuffer.fill[DoubleJava](numAtmosphPressure + 1)(0.0)
 
         print(timeYM)
         sortedTsWs.foreach {
@@ -124,20 +126,25 @@ object qsBOsc {
     }
 
     // TODO: fix scales on horizontal X axis (with the time), and change each atmospheric pressure
-    //       to a different color.
-    // plotTimeSeriesByYear(dataTable)
+    //       serie in the dataTable to a different color.
+    // plotTimeSeriesByYear(dataTable, tsWS.keys.toArray.sorted)
   }
 
-  def plotTimeSeriesByYear(dataTable: DataTable): Unit = {
-    // for debugging purposes only:
-    // val outputFile = new FileOutputStream(new File("/tmp/text.csv"))
-    // val dataWriter = DataWriterFactory.getInstance().get("text/csv")
-    // dataWriter.write(dataTable, outputFile)
+  def saveDataAsCsv(dataSource: AbstractDataSource, toCsvFile: String): Unit = {
+    val csvMimeType = "text/csv"
+    val outputFile = new FileOutputStream(new File(toCsvFile))
+    val dataWriter = DataWriterFactory.getInstance().get(csvMimeType)
+    dataWriter.write(dataSource, outputFile)
+  }
 
-    val plot = new XYPlot(dataTable)
+  def plotTimeSeriesByYear(dataTable: DataTable, columnsLegend: Array[AtmosphPressure]): Unit = {
+
+    val plot = new XYPlot()
+    plot.setInsets(new Insets2D.Double(80.0, 80.0, 80.0, 20.0))
     plot.getTitle().setText(dataTable.getName)
     plot.setBackground(Color.WHITE)
     plot.getPlotArea().setBackground(Color.WHITE)
+    plot.getPlotArea().setBorderColor(Color.BLUE)
 
     val axisRendererX = plot.getAxisRenderer(XYPlot.AXIS_X)
     val axisRendererY = plot.getAxisRenderer(XYPlot.AXIS_Y)
@@ -147,12 +154,27 @@ object qsBOsc {
     axisLabelY.setRotation(90)
     axisRendererY.setLabel(axisLabelY)
 
-    val defaultPointRenderer = new DefaultPointRenderer2D()
-    val color = new Color(255, 0, 0)
-    defaultPointRenderer.setColor(GraphicsUtils.deriveDarker(color))
-    defaultPointRenderer.setErrorVisible(false)
-    plot.setPointRenderers(dataTable, defaultPointRenderer)
+    plot.getAxisRenderer(XYPlot.AXIS_X).setIntersection(-DoubleJava.MAX_VALUE);
+    plot.getAxisRenderer(XYPlot.AXIS_Y).setIntersection(-DoubleJava.MAX_VALUE);
 
+    // TODO: do this for all the colums in columnsLegend, not only for the first data column in
+    //       the time series (column 0 is the time, YYYYMM)
+    val colAtmosphPressure = 1
+    val dataSeriesAtmosphPressure = new DataSeries(
+                                          columnsLegend(colAtmosphPressure-1).toString,
+                                          dataTable,
+                                          0, colAtmosphPressure
+                                    )
+    // for debugging purposes only:
+    saveDataAsCsv(dataSeriesAtmosphPressure, "/tmp/test.csv")
+
+    plot.add(colAtmosphPressure - 1, dataSeriesAtmosphPressure, true)
+    val lineRendered = new DefaultLineRenderer2D()
+    val color = new Color(255, 0, 0)
+    lineRendered.setColor(GraphicsUtils.deriveDarker(color))
+    plot.setLineRenderers(dataSeriesAtmosphPressure, lineRendered)
+
+    // save the XYPlot to a PNG image file
     val (saveImgWidth, saveImgHeight) = (1200, 1600)
 
     plot.setBounds(0, 0, saveImgHeight, saveImgWidth)
