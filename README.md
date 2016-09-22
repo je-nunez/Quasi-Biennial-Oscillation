@@ -23,6 +23,14 @@ as in the other input files.
 
 This project is a *work in progress*. The implementation is *incomplete* and subject to change. The documentation can be inaccurate.
 
+# How to Run:
+
+Run:
+
+      sbt run
+
+To install `sbt`, see [http://www.scala-sbt.org/download.html](http://www.scala-sbt.org/download.html)
+
 # Example:
 
 In the first version of this program, it has two reports, one of this has this heading:
