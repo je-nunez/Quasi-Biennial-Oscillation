@@ -3,11 +3,13 @@ package mainapp
 
 import java.lang.{Double => DoubleJava}
 import java.io.{File, FileOutputStream}
+import java.util.{HashMap => HashMapJava}
 
 import resource.managed
 
 // scalastyle:off underscore.import
 import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 // scalastyle:on underscore.import
 import scala.collection.mutable.{ArrayBuffer, HashMap => MutableHashMap}
 import scala.io.Source
@@ -23,9 +25,8 @@ import de.erichseifert.gral.graphics.{Insets2D, Label}
 import de.erichseifert.gral.io.data.{DataWriter, DataWriterFactory}
 import de.erichseifert.gral.io.plots.DrawableWriterFactory
 import de.erichseifert.gral.plots.XYPlot
-import de.erichseifert.gral.plots.axes.LinearRenderer2D
-import de.erichseifert.gral.plots.lines.{DefaultLineRenderer2D, LineRenderer}
-import de.erichseifert.gral.plots.points.DefaultPointRenderer2D
+import de.erichseifert.gral.plots.axes.{Axis, LinearRenderer2D}
+import de.erichseifert.gral.plots.lines.DefaultLineRenderer2D
 import de.erichseifert.gral.util.GraphicsUtils
 
 import org.gephi.preview.plugin.renderers.EdgeRenderer
@@ -102,12 +103,13 @@ object qsBOsc {
 
     val atmosphPressureToIndex = tsWS.keys.toList.sorted.zipWithIndex.toMap
     val numAtmosphPressure = atmosphPressureToIndex.keys.size
-    val dataTable = new DataTable(numAtmosphPressure + 1, classOf[DoubleJava])
-    dataTable.setName("Quasi-Bienal-Oscillation by date and atmospheric pressure")
+    // the first two colums in the dataTable are the row index itself and the date YYYYMM
+    val dataTable = new DataTable(numAtmosphPressure + 2, classOf[DoubleJava])
+    dataTable.setName("Quasi-Bienal Equatorial Wind Speed Oscillation by date")
 
-    timeYMs foreach {
-      case (timeYM) => {
-        val dataRow = ArrayBuffer.fill[DoubleJava](numAtmosphPressure + 1)(0.0)
+    timeYMs.zipWithIndex foreach {
+      case (timeYM, index) => {
+        val dataRow = ArrayBuffer.fill[DoubleJava](numAtmosphPressure + 2)(0.0)
 
         print(timeYM)
         sortedTsWs.foreach {
@@ -115,19 +117,18 @@ object qsBOsc {
             val speed = if (ts.contains(timeYM)) ts(timeYM) else 0
             print(f"${pressure}%4s: ${speed}%4d")
 
-            val pressureColIndex = atmosphPressureToIndex(pressure) + 1   // column is shifted by 1
+            val pressureColIndex = atmosphPressureToIndex(pressure) + 2   // column is shifted by 2
             dataRow.update(pressureColIndex, 1.0 * speed)
           }
         }
         println
-        dataRow.update(0, timeYM.toDouble)     // the first entry in row is X-value (the time)
+        dataRow.update(0, index.toDouble)     // the first entry in row is the row index
+        dataRow.update(1, timeYM.toDouble)     // the second entry in row is the time
         dataTable.add(dataRow.asJava)
       }
     }
 
-    // TODO: fix scales on horizontal X axis (with the time), and change each atmospheric pressure
-    //       serie in the dataTable to a different color.
-    // plotTimeSeriesByYear(dataTable, tsWS.keys.toArray.sorted)
+    plotTimeSeriesByYear(dataTable, tsWS.keys.toArray.sorted)
   }
 
   def saveDataAsCsv(dataSource: AbstractDataSource, toCsvFile: String): Unit = {
@@ -137,53 +138,96 @@ object qsBOsc {
     dataWriter.write(dataSource, outputFile)
   }
 
+  def savePlotAsPNG(plot: XYPlot, destFName: String, saveImgWidth: Int, saveImgHeight: Int):
+    Unit = {
+      plot.setBounds(0, 0, saveImgHeight, saveImgWidth)
+
+      val imgWriter = DrawableWriterFactory.getInstance().get("image/png")
+      val saveImgTo = new FileOutputStream(new File(destFName))
+      imgWriter.write(plot, saveImgTo, saveImgHeight, saveImgWidth)
+    }
+
+  def calculateCustomAxisXDateTickLabels(dataTable: DataTable): Map[DoubleJava, String] = {
+
+    val axisXTickLabels = MutableHashMap.empty[DoubleJava, String]
+    val dateFirstSample = dataTable.get(1, 0).asInstanceOf[DoubleJava].toInt.toString
+    axisXTickLabels += dataTable.get(0, 0).asInstanceOf[DoubleJava] -> dateFirstSample
+    val monthFirstSample = dateFirstSample takeRight 2
+    var countYearsPassedSinceLastTick: Int = 0
+    for { row <- 1 until dataTable.getRowCount } {
+      val dateSample = dataTable.get(1, row).asInstanceOf[DoubleJava].toInt.toString
+      if ( dateSample.takeRight(2) == monthFirstSample ) {
+        countYearsPassedSinceLastTick += 1
+        if (countYearsPassedSinceLastTick == 3) {
+          // draw the label of a tick every four years from the first year
+          axisXTickLabels += dataTable.get(0, row).asInstanceOf[DoubleJava] -> dateSample
+          countYearsPassedSinceLastTick = 0
+        }
+      }
+    }
+
+    axisXTickLabels.toMap
+  }
+
+  def createDefaultXYPlot(dataTable: DataTable, axisXTickLabels: Map[DoubleJava, String]):
+    XYPlot = {
+      val plot = new XYPlot()
+      plot.setInsets(new Insets2D.Double(80.0, 80.0, 80.0, 20.0))
+      plot.setBackground(Color.WHITE)
+      plot.getPlotArea().setBackground(Color.WHITE)
+      plot.getPlotArea().setBorderColor(Color.BLUE)
+
+      val axisRendererX = plot.getAxisRenderer(XYPlot.AXIS_X)
+      val axisRendererY = plot.getAxisRenderer(XYPlot.AXIS_Y)
+
+      axisRendererX.setLabel(new Label("Time"))
+      axisRendererX.setCustomTicks(new HashMapJava[DoubleJava,String](axisXTickLabels))
+
+      val axisLabelY = new Label("Wind Speed (0.1m/s)")
+      axisLabelY.setRotation(90)
+      axisRendererY.setLabel(axisLabelY)
+
+      plot.getAxisRenderer(XYPlot.AXIS_X).setIntersection(-DoubleJava.MAX_VALUE)
+      plot.getAxisRenderer(XYPlot.AXIS_Y).setIntersection(-DoubleJava.MAX_VALUE)
+
+      plot
+  }
+
   def plotTimeSeriesByYear(dataTable: DataTable, columnsLegend: Array[AtmosphPressure]): Unit = {
 
-    val plot = new XYPlot()
-    plot.setInsets(new Insets2D.Double(80.0, 80.0, 80.0, 20.0))
-    plot.getTitle().setText(dataTable.getName)
-    plot.setBackground(Color.WHITE)
-    plot.getPlotArea().setBackground(Color.WHITE)
-    plot.getPlotArea().setBorderColor(Color.BLUE)
+    val axisXTickLabels = calculateCustomAxisXDateTickLabels(dataTable)
 
-    val axisRendererX = plot.getAxisRenderer(XYPlot.AXIS_X)
-    val axisRendererY = plot.getAxisRenderer(XYPlot.AXIS_Y)
-    axisRendererX.setLabel(new Label("Time"))
+    // Plots can be re-used, so they do not need to be created at every iteration per atmospheric
+    // pressure:
+    // val plot = createDefaultXYPlot(dataTable, axisXTickLabels)
 
-    val axisLabelY = new Label("Wind Speed (0.1m/s)")
-    axisLabelY.setRotation(90)
-    axisRendererY.setLabel(axisLabelY)
+    val colStdXValue = 0
+    val (minColor, maxColor) = (0x000000ff, 0x00ffffff)  // range of colors for plotting each serie
+    val totalColorsNeeded = columnsLegend.length
+    columnsLegend.zipWithIndex foreach {
+      case (atmosphPressure, colAtmosphPressure) => {
+          val actualColumnInDataTable = colAtmosphPressure + 2
+          val dataSeriesAtmosphPressure = new DataSeries(atmosphPressure.toString, dataTable,
+                                                         colStdXValue, actualColumnInDataTable)
+          // for debugging purposes only: TODO: make it portable to Windows, ie., no /tmp/
+          saveDataAsCsv(dataSeriesAtmosphPressure, s"/tmp/speedAtPressure_${atmosphPressure}.csv")
 
-    plot.getAxisRenderer(XYPlot.AXIS_X).setIntersection(-DoubleJava.MAX_VALUE);
-    plot.getAxisRenderer(XYPlot.AXIS_Y).setIntersection(-DoubleJava.MAX_VALUE);
-
-    // TODO: do this for all the colums in columnsLegend, not only for the first data column in
-    //       the time series (column 0 is the time, YYYYMM)
-    val colAtmosphPressure = 1
-    val dataSeriesAtmosphPressure = new DataSeries(
-                                          columnsLegend(colAtmosphPressure-1).toString,
-                                          dataTable,
-                                          0, colAtmosphPressure
-                                    )
-    // for debugging purposes only:
-    saveDataAsCsv(dataSeriesAtmosphPressure, "/tmp/test.csv")
-
-    plot.add(colAtmosphPressure - 1, dataSeriesAtmosphPressure, true)
-    val lineRendered = new DefaultLineRenderer2D()
-    val color = new Color(255, 0, 0)
-    lineRendered.setColor(GraphicsUtils.deriveDarker(color))
-    plot.setLineRenderers(dataSeriesAtmosphPressure, lineRendered)
-
-    // save the XYPlot to a PNG image file
-    val (saveImgWidth, saveImgHeight) = (1200, 1600)
-
-    plot.setBounds(0, 0, saveImgHeight, saveImgWidth)
-
-    val imgWriter = DrawableWriterFactory.getInstance().get("image/png")
-    imgWriter.write(plot,
-                    new FileOutputStream(new File("/tmp/quasiBienalOscillation.png")),
-                    saveImgHeight, saveImgWidth)
-
+          val plot = createDefaultXYPlot(dataTable, axisXTickLabels)
+          plot.add(0, dataSeriesAtmosphPressure, true)
+          val lineRendered = new DefaultLineRenderer2D()
+          val rgb = ( 1.0 * (maxColor - minColor) *
+                      (colAtmosphPressure * 1.0 / totalColorsNeeded) )
+          val color = new Color(rgb.toInt, false)
+          // lineRendered.setColor(GraphicsUtils.deriveDarker(color))
+          lineRendered.setColor(color)
+          plot.setLineRenderers(dataSeriesAtmosphPressure, lineRendered)
+          plot.getTitle().setText(dataTable.getName +
+                                  s" at atmospheric pressure ${atmosphPressure} hPascals")
+          savePlotAsPNG(plot, s"/tmp/quasiBienalOscillation_${atmosphPressure}.png", 1200, 1600)
+          // if you want to re-use the plot, and not to created anew in each iteration, just do:
+          // plot.remove(dataSeriesAtmosphPressure)
+      }
+    }
   }
 
   def parseSingaporeMeasures(): TimeSeriesWindSpeedByAtmosphPressure = {
