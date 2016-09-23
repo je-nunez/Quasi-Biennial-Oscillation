@@ -31,7 +31,7 @@ Run:
 
 To install `sbt`, see [http://www.scala-sbt.org/download.html](http://www.scala-sbt.org/download.html)
 
-# Example:
+# Example report:
 
 In the first version of this program, it has two reports, one of this has this heading:
 
@@ -83,3 +83,19 @@ and this is a sample of it, where the first column is the date of the sample, an
       199005  10:   64  12:  114  15:  120  20:  136  25:  160  30:  124  35:   98  40:   85  45:   87  50:   22  60: -105  70: -109  80:  -87  90:  -92 100:    0
       199006  10:   48  12:   93  15:  130  20:  172  25:  185  30:  152  35:  154  40:  122  45:  145  50:  118  60:   43  70:  -50  80: -101  90:  -90 100:    0
       ......
+
+# Example visualizations:
+
+The program also generates the visualization of the oscillation in the wind speed according to each atmospheric pressure. Below are these visualizations for some -not all- of the atmospheric pressures.
+
+![Equatorial wind speed oscillation at atmospheric pressure 10 hPascal](example_visualizations/quasiBienalOscillation_10.png)
+![Equatorial wind speed oscillation at atmospheric pressure 12 hPascal](example_visualizations/quasiBienalOscillation_12.png)
+![Equatorial wind speed oscillation at atmospheric pressure 15 hPascal](example_visualizations/quasiBienalOscillation_15.png)
+![Equatorial wind speed oscillation at atmospheric pressure 20 hPascal](example_visualizations/quasiBienalOscillation_20.png)
+![Equatorial wind speed oscillation at atmospheric pressure 25 hPascal](example_visualizations/quasiBienalOscillation_25.png)
+![Equatorial wind speed oscillation at atmospheric pressure 45 hPascal](example_visualizations/quasiBienalOscillation_45.png)
+![Equatorial wind speed oscillation at atmospheric pressure 60 hPascal](example_visualizations/quasiBienalOscillation_60.png)
+![Equatorial wind speed oscillation at atmospheric pressure 70 hPascal](example_visualizations/quasiBienalOscillation_70.png)
+![Equatorial wind speed oscillation at atmospheric pressure 80 hPascal](example_visualizations/quasiBienalOscillation_80.png)
+![Equatorial wind speed oscillation at atmospheric pressure 90 hPascal](example_visualizations/quasiBienalOscillation_90.png)
+
