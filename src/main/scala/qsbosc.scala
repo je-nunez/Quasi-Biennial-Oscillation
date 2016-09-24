@@ -3,7 +3,8 @@ package mainapp
 
 import java.lang.{Double => DoubleJava}
 import java.io.{File, FileOutputStream}
-import java.util.{HashMap => HashMapJava}
+import java.util.{ArrayList => ArrayListJava, HashMap => HashMapJava, List => ListJava,
+                  Set => SetJava}
 
 import resource.managed
 
@@ -18,14 +19,15 @@ import scala.io.Source
 // alternative for visualization could be JFreeChart)
 
 // scalastyle:off illegal.imports
-import java.awt.Color
+import java.awt.{Color, Font}
 // scalastyle:on illegal.imports
 import de.erichseifert.gral.data.{AbstractDataSource, DataSeries, DataTable}
 import de.erichseifert.gral.graphics.{Insets2D, Label}
 import de.erichseifert.gral.io.data.{DataWriter, DataWriterFactory}
 import de.erichseifert.gral.io.plots.DrawableWriterFactory
 import de.erichseifert.gral.plots.XYPlot
-import de.erichseifert.gral.plots.axes.{Axis, LinearRenderer2D}
+import de.erichseifert.gral.plots.axes.{Axis, LinearRenderer2D, Tick}
+import de.erichseifert.gral.plots.axes.Tick.TickType
 import de.erichseifert.gral.plots.lines.DefaultLineRenderer2D
 import de.erichseifert.gral.util.GraphicsUtils
 
@@ -158,8 +160,10 @@ object qsBOsc {
       val dateSample = dataTable.get(1, row).asInstanceOf[DoubleJava].toInt.toString
       if ( dateSample.takeRight(2) == monthFirstSample ) {
         countYearsPassedSinceLastTick += 1
-        if (countYearsPassedSinceLastTick == 3) {
-          // draw the label of a tick every four years from the first year
+        if (countYearsPassedSinceLastTick == 1) {
+          // draw the label of a tick every one year from the first year (for every one year,
+          // the counter "countYearsPassedSinceLastTick" is not really necessary: it is for
+          // a custom label not one per year, but only one label every a few years apart though)
           axisXTickLabels += dataTable.get(0, row).asInstanceOf[DoubleJava] -> dateSample
           countYearsPassedSinceLastTick = 0
         }
@@ -172,19 +176,28 @@ object qsBOsc {
   def createDefaultXYPlot(dataTable: DataTable, axisXTickLabels: Map[DoubleJava, String]):
     XYPlot = {
       val plot = new XYPlot()
-      plot.setInsets(new Insets2D.Double(80.0, 80.0, 80.0, 20.0))
+      val (top, left, bottom, right) = (80.0, 80.0, 100.0, 20.0)
+      plot.setInsets(new Insets2D.Double(top, left, bottom, right))
       plot.setBackground(Color.WHITE)
       plot.getPlotArea().setBackground(Color.WHITE)
       plot.getPlotArea().setBorderColor(Color.BLUE)
 
-      val axisRendererX = plot.getAxisRenderer(XYPlot.AXIS_X)
+      val axisRendererX = new LinearRenderer2DNoMajorTicks()
       val axisRendererY = plot.getAxisRenderer(XYPlot.AXIS_Y)
 
-      axisRendererX.setLabel(new Label("Time"))
+      val axisLabelX = new Label("Time (YYYYMM)")
+      axisLabelX.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 16))
+      axisRendererX.setLabelDistance(axisRendererX.getLabelDistance + 3)
+      axisRendererX.setLabel(axisLabelX)
       axisRendererX.setCustomTicks(new HashMapJava[DoubleJava,String](axisXTickLabels))
+      axisRendererX.setTickLabelRotation(90)
+      plot.setAxisRenderer(XYPlot.AXIS_X, axisRendererX)
 
-      val axisLabelY = new Label("Wind Speed (0.1m/s)")
+      val axisLabelY = new Label("Avg Wind Speed (0.1m/s)")
+      axisLabelY.setColor(Color.BLUE)
+      axisLabelY.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 16))
       axisLabelY.setRotation(90)
+      axisRendererY.setLabelDistance(axisRendererY.getLabelDistance + 1)
       axisRendererY.setLabel(axisLabelY)
 
       plot.getAxisRenderer(XYPlot.AXIS_X).setIntersection(-DoubleJava.MAX_VALUE)
@@ -266,6 +279,40 @@ object qsBOsc {
      }
 
      timeSeries.map(kv => (kv._1,kv._2.toMap)).toMap
+  }
+
+  class LinearRenderer2DNoMajorTicks extends LinearRenderer2D {
+
+    protected override def createTicks(ticks: ListJava[Tick], axis: Axis,
+                                       min: Double, max: Double,
+                                       tickPositions: SetJava[DoubleJava],
+                                       isAutoSpacing: Boolean): Unit = {
+
+      val ticksMajorMinor = new ArrayListJava[Tick]()
+
+      super.createTicks(ticksMajorMinor, axis, min, max, tickPositions, isAutoSpacing)
+
+      // lower all the Major Ticks, because the major ticks have labels and
+      // we only need to paint the custom labels, not the major labels. I.e,
+      // convert all the Major Ticks to Minor Ticks
+
+      val allTicksMinor =
+        ticksMajorMinor.map(
+                t => {
+                       if ( t.`type` == TickType.MAJOR ) {
+                         // convert the major tick to a minor tick (and no label string)
+                         val replacementMinor = new Tick(TickType.MINOR, t.position, t.normal,
+                                                         t.drawable, t.shape, "")
+                         replacementMinor
+                       } else {
+                         t
+                       }
+                     }
+        )
+
+      // ticks.addAll(allTicksMinor)
+    }
+
   }
 
 }
