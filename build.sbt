@@ -25,16 +25,18 @@ concurrentRestrictions in Global += Tags.limit(Tags.Test, 1)
 val versions = Map(
                     "spark"    -> "1.6.2",
                     "gephi"    -> "0.9.1",
-                    "gral-core"    -> "0.11",
+                    "jTransforms"    -> "3.1",   // for FFT
+                    "gral-core"    -> "0.11",    // plotting
                     "scalaArm" -> "1.4"
                   )
-           
+
 val gephiToolkitURL = "https://github.com/gephi/gephi-toolkit/releases/download/v0.9.1/gephi-toolkit-0.9.1-all.jar"
 
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % versions("spark") % "provided",
   "org.apache.spark" %% "spark-mllib" % versions("spark"),
   "org.gephi" % "gephi-toolkit" % versions("gephi") from gephiToolkitURL,
+  "com.github.wendykierp" % "JTransforms" % versions("jTransforms"),
   "de.erichseifert.gral" % "gral-core" % versions("gral-core"),
   "org.apache.commons" % "commons-lang3" % "3.0",
   "com.jsuereth" %% "scala-arm" % versions("scalaArm"),
