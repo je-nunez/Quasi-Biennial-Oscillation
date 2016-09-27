@@ -29,6 +29,7 @@ import de.erichseifert.gral.plots.XYPlot
 import de.erichseifert.gral.plots.axes.{Axis, LinearRenderer2D, Tick}
 import de.erichseifert.gral.plots.axes.Tick.TickType
 import de.erichseifert.gral.plots.lines.DefaultLineRenderer2D
+import de.erichseifert.gral.data.statistics.Statistics
 import de.erichseifert.gral.util.GraphicsUtils
 
 import org.gephi.preview.plugin.renderers.EdgeRenderer
@@ -194,7 +195,7 @@ object qsBOsc {
       plot.setAxisRenderer(XYPlot.AXIS_X, axisRendererX)
 
       val axisLabelY = new Label("Avg Wind Speed (0.1m/s)")
-      axisLabelY.setColor(Color.BLUE)
+      axisLabelY.setColor(Color.RED)
       axisLabelY.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 16))
       axisLabelY.setRotation(90)
       axisRendererY.setLabelDistance(axisRendererY.getLabelDistance + 1)
@@ -206,39 +207,87 @@ object qsBOsc {
       plot
   }
 
+  def findMinimumMaxWindSpeedsInData(dataTable: DataTable): (DoubleJava, DoubleJava) = {
+
+    var (absoluteMin, absoluteMax) = (DoubleJava.POSITIVE_INFINITY, DoubleJava.NEGATIVE_INFINITY)
+
+    // the first two colums in the dataTable are the row index itself and the date YYYYMM
+    for { columnIndex <- 2 until dataTable.getColumnCount }{
+      val column = dataTable.getColumn(columnIndex)
+
+      val colMin = column.getStatistics(Statistics.MIN)
+      val colMax = column.getStatistics(Statistics.MAX)
+
+      if (colMin < absoluteMin) { absoluteMin = colMin }
+      if (absoluteMax < colMax) { absoluteMax = colMax }
+    }
+
+    (absoluteMin, absoluteMax)
+  }
+
+  def plotAtmosphericPressureByYear(dataTable: DataTable, atmosphPressure: Int,
+                                    colAtmosphPressureInSeries: Int,
+                                    axisXTickLabels: Map[DoubleJava, String],
+                                    absMinWindSpeed: DoubleJava, absMaxWindSpeed: DoubleJava,
+                                    colorToPlot: Color)
+    : Unit = {
+
+      val colStdXValue = 0
+
+      val actualColumnInDataTable = colAtmosphPressureInSeries + 2
+      val dataSeriesAtmosphPressure = new DataSeries(atmosphPressure.toString, dataTable,
+                                                     colStdXValue, actualColumnInDataTable)
+      // for debugging purposes only: TODO: make it portable to Windows, ie., no /tmp/
+      saveDataAsCsv(dataSeriesAtmosphPressure, s"/tmp/speedAtPressure_${atmosphPressure}.csv")
+
+      val plot = createDefaultXYPlot(dataTable, axisXTickLabels)
+      plot.add(0, dataSeriesAtmosphPressure, true)
+      val lineRendered = new DefaultLineRenderer2D()
+      // lineRendered.setColor(GraphicsUtils.deriveDarker(colorToPlot))
+      lineRendered.setColor(colorToPlot)
+      plot.setLineRenderers(dataSeriesAtmosphPressure, lineRendered)
+
+      // standarize all Y axis in all generated images to the same numm range of wind speeds,
+      // from "absMinWindSpeed" up to "absMaxWindSpeed" (plus 5% for borders)
+      val emptySpaceYBorders = 0.05
+      plot.getAxis(XYPlot.AXIS_Y).setRange(absMinWindSpeed * (1 + emptySpaceYBorders),
+                                           absMaxWindSpeed * (1 + emptySpaceYBorders))
+
+      val labelTitle = plot.getTitle()
+      labelTitle.setText(dataTable.getName +
+                         s", at atmospheric pressure ${atmosphPressure} hPascals")
+      labelTitle.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 24))
+      labelTitle.setColor(Color.BLUE)
+
+      savePlotAsPNG(plot, s"/tmp/quasiBienalOscillation_${atmosphPressure}.png", 1200, 1600)
+      // if you want to re-use the plot, and not to created anew in each iteration, just do:
+      //     plot.remove(dataSeriesAtmosphPressure)
+      // and return the plot to the caller, so the caller can re-use it for other tasks
+  }
+
   def plotTimeSeriesByYear(dataTable: DataTable, columnsLegend: Array[AtmosphPressure]): Unit = {
 
     val axisXTickLabels = calculateCustomAxisXDateTickLabels(dataTable)
+
+    val (absMinSpeed, absMaxSpeed) = findMinimumMaxWindSpeedsInData(dataTable)
 
     // Plots can be re-used, so they do not need to be created at every iteration per atmospheric
     // pressure:
     // val plot = createDefaultXYPlot(dataTable, axisXTickLabels)
 
-    val colStdXValue = 0
-    val (minColor, maxColor) = (0x000000ff, 0x00ffffff)  // range of colors for plotting each serie
+    val minColor = new Color(0x000000ff)
+    val maxColor = new Color(0x00ff0000)  // range of colors for plotting each serie
     val totalColorsNeeded = columnsLegend.length
+
     columnsLegend.zipWithIndex foreach {
       case (atmosphPressure, colAtmosphPressure) => {
-          val actualColumnInDataTable = colAtmosphPressure + 2
-          val dataSeriesAtmosphPressure = new DataSeries(atmosphPressure.toString, dataTable,
-                                                         colStdXValue, actualColumnInDataTable)
-          // for debugging purposes only: TODO: make it portable to Windows, ie., no /tmp/
-          saveDataAsCsv(dataSeriesAtmosphPressure, s"/tmp/speedAtPressure_${atmosphPressure}.csv")
 
-          val plot = createDefaultXYPlot(dataTable, axisXTickLabels)
-          plot.add(0, dataSeriesAtmosphPressure, true)
-          val lineRendered = new DefaultLineRenderer2D()
-          val rgb = ( 1.0 * (maxColor - minColor) *
-                      (colAtmosphPressure * 1.0 / totalColorsNeeded) )
-          val color = new Color(rgb.toInt, false)
-          // lineRendered.setColor(GraphicsUtils.deriveDarker(color))
-          lineRendered.setColor(color)
-          plot.setLineRenderers(dataSeriesAtmosphPressure, lineRendered)
-          plot.getTitle().setText(dataTable.getName +
-                                  s" at atmospheric pressure ${atmosphPressure} hPascals")
-          savePlotAsPNG(plot, s"/tmp/quasiBienalOscillation_${atmosphPressure}.png", 1200, 1600)
-          // if you want to re-use the plot, and not to created anew in each iteration, just do:
-          // plot.remove(dataSeriesAtmosphPressure)
+           val colorToPlot = GraphicsUtils.blend(minColor, maxColor,
+                                                 (1.0 * colAtmosphPressure)/totalColorsNeeded)
+
+           plotAtmosphericPressureByYear(dataTable, atmosphPressure, colAtmosphPressure,
+                                         axisXTickLabels, absMinSpeed, absMaxSpeed,
+                                         colorToPlot)
       }
     }
   }
