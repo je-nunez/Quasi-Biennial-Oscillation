@@ -257,7 +257,7 @@ object qsBOsc {
       labelTitle.setText(dataTable.getName +
                          s", at atmospheric pressure ${atmosphPressure} hPascals")
       labelTitle.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 24))
-      labelTitle.setColor(Color.BLUE)
+      labelTitle.setColor(Color.BLACK)
 
       savePlotAsPNG(plot, s"/tmp/quasiBienalOscillation_${atmosphPressure}.png", 1200, 1600)
       // if you want to re-use the plot, and not to created anew in each iteration, just do:
