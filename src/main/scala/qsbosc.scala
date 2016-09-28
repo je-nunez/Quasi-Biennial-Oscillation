@@ -13,6 +13,7 @@ import scala.collection.JavaConverters._
 import scala.collection.JavaConversions._
 // scalastyle:on underscore.import
 import scala.collection.mutable.{ArrayBuffer, HashMap => MutableHashMap}
+import scala.math
 import scala.io.Source
 
 // a Graphing Library for Java to visualize the Quasi-Bienal-Oscillation time series (an
@@ -31,6 +32,9 @@ import de.erichseifert.gral.plots.axes.Tick.TickType
 import de.erichseifert.gral.plots.lines.DefaultLineRenderer2D
 import de.erichseifert.gral.data.statistics.Statistics
 import de.erichseifert.gral.util.GraphicsUtils
+
+// The JTransforms Fast Fourier Transform
+import org.jtransforms.fft.DoubleFFT_1D
 
 import org.gephi.preview.plugin.renderers.EdgeRenderer
 
@@ -225,6 +229,87 @@ object qsBOsc {
     (absoluteMin, absoluteMax)
   }
 
+  /*
+  def hammingWindow(inputArray: Array[WindSpeed]): Array[DoubleJava] = {
+    val length: Int = inputArray.length
+    val twoPi = 2.0 * math.Pi
+
+    inputArray.zipWithIndex.map(
+      kv =>
+         (( 0.53836 - ( 0.46164 * math.cos( (twoPi * kv._2) / (length - 1) ))) * kv._1): DoubleJava
+    )
+
+  }
+   */
+
+  def runFFTrealForwardFull1D(inputData: Array[WindSpeed]): (DoubleFFT_1D, Array[Double]) = {
+
+    val realInputBuffer = ArrayBuffer.fill[Double](inputData.length * 2)(0.0)
+
+    inputData.zipWithIndex.foreach {
+      case (windSpeed, arrayIndex) => {
+        realInputBuffer(arrayIndex) = (1.0 * windSpeed): Double
+      }
+    }
+
+    val realInput = realInputBuffer.toArray
+
+    val fft = new DoubleFFT_1D(inputData.length)
+
+    fft.realForwardFull(realInput)
+
+    (fft, realInput)
+  }
+
+  def runFFTrealForwardFull1D(fft: DoubleFFT_1D, inputData: Array[Double]): Array[Double] = {
+    fft.complexInverse(inputData, true)
+
+    inputData
+  }
+
+  def fftWindSpeedOscillationEstimation(windSpeed: DataSeries): DataTable = {
+
+    val numbRows = windSpeed.getRowCount
+    val windSpeedBuffer = ArrayBuffer.fill[WindSpeed](numbRows)(0)
+
+    val numInputColumns = windSpeed.getColumnCount
+
+    // the last column in the DataSeries is the wind speed
+    val actualWindSpeeds = windSpeed.getColumn(numInputColumns - 1)
+    for { row <- 0 until numbRows } {
+      windSpeedBuffer(row) = actualWindSpeeds.get(row).asInstanceOf[DoubleJava].toInt
+    }
+
+    val inputArray = windSpeedBuffer.toArray
+    val (fft1D, resultArray) = runFFTrealForwardFull1D(inputArray)
+
+    val inversedData = runFFTrealForwardFull1D(fft1D, resultArray)
+
+    // assemble a new DataTable with the results of the windSpeed DataSeries and a new column
+    // with the FFT estimation
+
+    val newDataTable = new DataTable(numInputColumns + 1, classOf[DoubleJava])
+
+    for { row <- 0 until numbRows } {
+
+      val oldRow = windSpeed.getRow(row)
+      val newDataRow = ArrayBuffer.fill[DoubleJava](numInputColumns + 1)(0.0)
+
+      for { col <- 0 until numInputColumns } {
+        newDataRow.update(col, oldRow.get(col).asInstanceOf[DoubleJava])
+      }
+
+      // complexInverse(...) for the Fast Fourier Transform returns in (index*2) the inversed
+      // real values (and in index*2 + 1, the imaginary part)
+      newDataRow.update(numInputColumns, inversedData(row * 2))
+
+      newDataTable.add(newDataRow.asJava)
+    }
+
+    newDataTable
+  }
+
+
   def plotAtmosphericPressureByYear(dataTable: DataTable, atmosphPressure: Int,
                                     colAtmosphPressureInSeries: Int,
                                     axisXTickLabels: Map[DoubleJava, String],
@@ -237,15 +322,18 @@ object qsBOsc {
       val actualColumnInDataTable = colAtmosphPressureInSeries + 2
       val dataSeriesAtmosphPressure = new DataSeries(atmosphPressure.toString, dataTable,
                                                      colStdXValue, actualColumnInDataTable)
+
+      val newDataAtmosphPressureFFT = fftWindSpeedOscillationEstimation(dataSeriesAtmosphPressure)
+
       // for debugging purposes only: TODO: make it portable to Windows, ie., no /tmp/
-      saveDataAsCsv(dataSeriesAtmosphPressure, s"/tmp/speedAtPressure_${atmosphPressure}.csv")
+      saveDataAsCsv(newDataAtmosphPressureFFT, s"/tmp/speedAtPressure_${atmosphPressure}.csv")
 
       val plot = createDefaultXYPlot(dataTable, axisXTickLabels)
-      plot.add(0, dataSeriesAtmosphPressure, true)
+      plot.add(0, newDataAtmosphPressureFFT, true)
       val lineRendered = new DefaultLineRenderer2D()
       // lineRendered.setColor(GraphicsUtils.deriveDarker(colorToPlot))
       lineRendered.setColor(colorToPlot)
-      plot.setLineRenderers(dataSeriesAtmosphPressure, lineRendered)
+      plot.setLineRenderers(newDataAtmosphPressureFFT, lineRendered)
 
       // standarize all Y axis in all generated images to the same numm range of wind speeds,
       // from "absMinWindSpeed" up to "absMaxWindSpeed" (plus 5% for borders)
@@ -261,7 +349,7 @@ object qsBOsc {
 
       savePlotAsPNG(plot, s"/tmp/quasiBienalOscillation_${atmosphPressure}.png", 1200, 1600)
       // if you want to re-use the plot, and not to created anew in each iteration, just do:
-      //     plot.remove(dataSeriesAtmosphPressure)
+      //     plot.remove(qnewDataAtmosphPressureFFT)
       // and return the plot to the caller, so the caller can re-use it for other tasks
   }
 
