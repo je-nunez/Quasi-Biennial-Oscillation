@@ -36,6 +36,10 @@ import de.erichseifert.gral.util.GraphicsUtils
 // The JTransforms Fast Fourier Transform
 import org.jtransforms.fft.DoubleFFT_1D
 
+import org.apache.spark.SparkContext
+import org.apache.spark.mllib.linalg.{Vector => SparkVector, DenseVector}
+import org.apache.spark.rdd.RDD
+
 import org.gephi.preview.plugin.renderers.EdgeRenderer
 
 
@@ -416,6 +420,29 @@ object qsBOsc {
      }
 
      timeSeries.map(kv => (kv._1,kv._2.toMap)).toMap
+  }
+
+  def convertDataSource2RDD(inpDataSrc: AbstractDataSource, sc: SparkContext): RDD[SparkVector] = {
+
+    val numbRows = inpDataSrc.getRowCount
+    val numbCols = inpDataSrc.getColumnCount
+    val bufferArray = new ArrayBuffer[SparkVector](numbRows)
+
+    for { rowIdx <- 0 until numbRows } {
+
+      val inputRow = inpDataSrc.getRow(rowIdx)
+      val rddRow = new ArrayBuffer[Double](numbCols)
+
+      for { col <- 0 until numbCols } {
+        rddRow.update(col, inputRow.get(col).asInstanceOf[DoubleJava])
+      }
+
+      bufferArray(rowIdx) = new DenseVector(rddRow.toArray)
+    }
+
+    val rdd = sc.parallelize(bufferArray).cache()
+
+    rdd
   }
 
   class LinearRenderer2DNoMajorTicks extends LinearRenderer2D {
