@@ -36,9 +36,25 @@ import de.erichseifert.gral.util.GraphicsUtils
 // The JTransforms Fast Fourier Transform
 import org.jtransforms.fft.DoubleFFT_1D
 
+// Apache Spark
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.{Vector => SparkVector, DenseVector}
 import org.apache.spark.rdd.RDD
+
+// DeepLearning4J LSTM
+import org.deeplearning4j.nn.api.Layer
+import org.deeplearning4j.nn.api.OptimizationAlgorithm
+import org.deeplearning4j.nn.conf.MultiLayerConfiguration
+import org.deeplearning4j.nn.conf.NeuralNetConfiguration
+import org.deeplearning4j.nn.conf.Updater
+import org.deeplearning4j.nn.conf.layers.GravesLSTM
+import org.deeplearning4j.nn.conf.layers.RnnOutputLayer
+import org.deeplearning4j.nn.multilayer.MultiLayerNetwork
+import org.deeplearning4j.nn.weights.WeightInit
+import org.deeplearning4j.optimize.listeners.ScoreIterationListener
+import org.nd4j.linalg.api.ndarray.INDArray
+import org.nd4j.linalg.dataset.DataSet
+import org.nd4j.linalg.lossfunctions.LossFunctions.LossFunction
 
 import org.gephi.preview.plugin.renderers.EdgeRenderer
 

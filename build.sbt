@@ -24,6 +24,7 @@ concurrentRestrictions in Global += Tags.limit(Tags.Test, 1)
 
 val versions = Map(
                     "spark"    -> "1.6.2",
+                    "deeplearning4j"    -> "0.6.0",
                     "gephi"    -> "0.9.1",
                     "jTransforms"    -> "3.1",   // for FFT
                     "gral-core"    -> "0.11",    // plotting
@@ -35,6 +36,8 @@ val gephiToolkitURL = "https://github.com/gephi/gephi-toolkit/releases/download/
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % versions("spark") % "provided",
   "org.apache.spark" %% "spark-mllib" % versions("spark"),
+  "org.deeplearning4j" % "deeplearning4j-core" % versions("deeplearning4j"),
+  "org.deeplearning4j" % "deeplearning4j-nn" % versions("deeplearning4j"),
   "org.gephi" % "gephi-toolkit" % versions("gephi") from gephiToolkitURL,
   "com.github.wendykierp" % "JTransforms" % versions("jTransforms"),
   "de.erichseifert.gral" % "gral-core" % versions("gral-core"),
