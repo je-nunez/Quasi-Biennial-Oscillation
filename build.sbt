@@ -27,6 +27,7 @@ val versions = Map(
                     "deeplearning4j"    -> "0.6.0",
                     "gephi"    -> "0.9.1",
                     "jTransforms"    -> "3.1",   // for FFT
+                    "twelvemonkeys"    -> "3.2.1",    // ImageIO
                     "gral-core"    -> "0.11",    // plotting
                     "scalaArm" -> "1.4"
                   )
@@ -40,6 +41,15 @@ libraryDependencies ++= Seq(
   "org.deeplearning4j" % "deeplearning4j-nn" % versions("deeplearning4j"),
   "org.gephi" % "gephi-toolkit" % versions("gephi") from gephiToolkitURL,
   "com.github.wendykierp" % "JTransforms" % versions("jTransforms"),
+
+  "com.twelvemonkeys.common" % "common-lang" % versions("twelvemonkeys"),
+  "com.twelvemonkeys.common" % "common-io" % versions("twelvemonkeys"),
+  "com.twelvemonkeys.common" % "common-image" % versions("twelvemonkeys"),
+  "com.twelvemonkeys.imageio" % "imageio-core" % versions("twelvemonkeys"),
+  "com.twelvemonkeys.imageio" % "imageio-metadata" % versions("twelvemonkeys"),
+  "com.twelvemonkeys.imageio" % "imageio-jpeg" % versions("twelvemonkeys"),
+  "com.twelvemonkeys.imageio" % "imageio-tiff" % versions("twelvemonkeys"),
+
   "de.erichseifert.gral" % "gral-core" % versions("gral-core"),
   "org.apache.commons" % "commons-lang3" % "3.0",
   "com.jsuereth" %% "scala-arm" % versions("scalaArm"),
