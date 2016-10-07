@@ -37,9 +37,12 @@ import de.erichseifert.gral.util.GraphicsUtils
 import org.jtransforms.fft.DoubleFFT_1D
 
 // Apache Spark
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.linalg.{Vector => SparkVector, DenseVector}
 import org.apache.spark.rdd.RDD
+
+// Cloudera's Time Series Analysis for Spark
+import com.cloudera.sparkts.models.ARIMA
 
 // DeepLearning4J LSTM
 import org.deeplearning4j.nn.api.Layer
@@ -93,16 +96,28 @@ object qsBOsc {
 
     val timeSeries = parseSingaporeMeasures()
 
-    processTimeSeries(timeSeries)
+    val sparkConf = new SparkConf()
+                          .setMaster("local[*]")
+                          .setAppName("QuasiBiennialOscillation")
+                          .set("spark.app.id", "QuasiBiennialOscillation")
+                          .set("spark.executor.heartbeatInterval", "10s")
+                          .set("spark.driver.maxResultSize", "2g")
+                          .set("spark.ui.enabled", "false")
 
+    val sc = new SparkContext(sparkConf)
+
+    processTimeSeries(timeSeries, sc)
+
+    sc.stop()
   }
 
-  def processTimeSeries(tsWS: TimeSeriesWindSpeedByAtmosphPressure): Unit = {
+  def processTimeSeries(tsWS: TimeSeriesWindSpeedByAtmosphPressure, sparkCtxt: SparkContext)
+    : Unit = {
 
-    reportTimeSeriesByPressure(tsWS)
+      reportTimeSeriesByPressure(tsWS)
 
-    reportTimeSeriesByYear(tsWS)
-  }
+      reportTimeSeriesByYear(tsWS, sparkCtxt)
+    }
 
   def reportTimeSeriesByPressure(tsWS: TimeSeriesWindSpeedByAtmosphPressure): Unit = {
 
@@ -121,42 +136,46 @@ object qsBOsc {
     }
   }
 
-  def reportTimeSeriesByYear(tsWS: TimeSeriesWindSpeedByAtmosphPressure): Unit = {
+  def reportTimeSeriesByYear(tsWS: TimeSeriesWindSpeedByAtmosphPressure, sparkCtxt: SparkContext)
+    : Unit = {
 
-    println("Reporting the Quasi-Bienal-Oscillation according to date first.")
+      println("Reporting the Quasi-Bienal-Oscillation according to date first.")
 
-    val timeYMs = tsWS.values.map(_.keys.toList).flatten.toList.distinct.sorted
-    val sortedTsWs = tsWS.toSeq.sortBy(_._1)
+      val timeYMs = tsWS.values.map(_.keys.toList).flatten.toList.distinct.sorted
+      val sortedTsWs = tsWS.toSeq.sortBy(_._1)
 
-    val atmosphPressureToIndex = tsWS.keys.toList.sorted.zipWithIndex.toMap
-    val numAtmosphPressure = atmosphPressureToIndex.keys.size
-    // the first two colums in the dataTable are the row index itself and the date YYYYMM
-    val dataTable = new DataTable(numAtmosphPressure + 2, classOf[DoubleJava])
-    dataTable.setName("Quasi-Bienal Equatorial Wind Speed Oscillation by date")
+      val atmosphPressureToIndex = tsWS.keys.toList.sorted.zipWithIndex.toMap
+      val numAtmosphPressure = atmosphPressureToIndex.keys.size
+      // the first two colums in the dataTable are the row index itself and the date YYYYMM
+      val dataTable = new DataTable(numAtmosphPressure + 2, classOf[DoubleJava])
+      dataTable.setName("Quasi-Bienal Equatorial Wind Speed Oscillation by date")
 
-    timeYMs.zipWithIndex foreach {
-      case (timeYM, index) => {
-        val dataRow = ArrayBuffer.fill[DoubleJava](numAtmosphPressure + 2)(0.0)
+      timeYMs.zipWithIndex foreach {
+        case (timeYM, index) => {
+          val dataRow = ArrayBuffer.fill[DoubleJava](numAtmosphPressure + 2)(0.0)
 
-        print(timeYM)
-        sortedTsWs.foreach {
-          case (pressure, ts) => {
-            val speed = if (ts.contains(timeYM)) ts(timeYM) else 0
-            print(f"${pressure}%4s: ${speed}%4d")
+          print(timeYM)
+          sortedTsWs.foreach {
+            case (pressure, ts) => {
+              val speed = if (ts.contains(timeYM)) ts(timeYM) else 0
+              print(f"${pressure}%4s: ${speed}%4d")
 
-            val pressureColIndex = atmosphPressureToIndex(pressure) + 2   // column is shifted by 2
-            dataRow.update(pressureColIndex, 1.0 * speed)
+              val pressureColIndex = atmosphPressureToIndex(pressure) + 2   // column is shifted by 2
+              dataRow.update(pressureColIndex, 1.0 * speed)
+            }
           }
+          println
+          dataRow.update(0, index.toDouble)     // the first entry in row is the row index
+          dataRow.update(1, timeYM.toDouble)     // the second entry in row is the time
+          dataTable.add(dataRow.asJava)
         }
-        println
-        dataRow.update(0, index.toDouble)     // the first entry in row is the row index
-        dataRow.update(1, timeYM.toDouble)     // the second entry in row is the time
-        dataTable.add(dataRow.asJava)
       }
-    }
 
-    plotTimeSeriesByYear(dataTable, tsWS.keys.toArray.sorted)
-  }
+      plotTimeSeriesByYear(dataTable, tsWS.keys.toArray.sorted)
+
+      val rddWindSpeeds = convertDataSource2RDD(dataTable, sparkCtxt)
+      runARIMApredictions(rddWindSpeeds)
+    }
 
   def saveDataAsCsv(dataSource: AbstractDataSource, toCsvFile: String): Unit = {
     val csvMimeType = "text/csv"
@@ -442,12 +461,15 @@ object qsBOsc {
 
     val numbRows = inpDataSrc.getRowCount
     val numbCols = inpDataSrc.getColumnCount
-    val bufferArray = new ArrayBuffer[SparkVector](numbRows)
+    // scalastyle:off null
+    val bufferArray = ArrayBuffer.fill[SparkVector](numbRows)(null)
+    // scalastyle:on null
 
     for { rowIdx <- 0 until numbRows } {
 
       val inputRow = inpDataSrc.getRow(rowIdx)
-      val rddRow = new ArrayBuffer[Double](numbCols)
+
+      val rddRow = ArrayBuffer.fill[Double](numbCols)(0.0)
 
       for { col <- 0 until numbCols } {
         rddRow.update(col, inputRow.get(col).asInstanceOf[DoubleJava])
@@ -459,6 +481,43 @@ object qsBOsc {
     val rdd = sc.parallelize(bufferArray).cache()
 
     rdd
+  }
+
+  def runARIMApredictions(windSpeedRdd: RDD[SparkVector]): Unit = {
+
+    def runARIMApredictionForAtmosphPressure(rddColIndex: Int): Unit = {
+
+      val univariateTS = new DenseVector(
+                               windSpeedRdd
+                                 .map( multiVariateVector => multiVariateVector(rddColIndex) )
+                                 .collect
+                             )
+
+      // Find an ARIMA auto-fit. (We know that for lowest atmospheric pressure in the
+      // Quasi-Biennial-Oscillation, 10 hPa (colDataIndex == 2 in the RDD), the ARIMA
+      // hyperparameters were (4,0,1) found in R by the "forecast"'s auto.arima() method, but
+      // we prefer to do an autoFit in general here, for all other atmospheric pressures in
+      // the QBO.
+
+      val arimaModel = ARIMA.autoFit(univariateTS)
+
+      println(s"ARIMA(${arimaModel.p}, ${arimaModel.d}, ${arimaModel.q})\n" +
+              s"isStationary: ${arimaModel.isStationary}, " +
+              s"isInvertible: ${arimaModel.isInvertible}, " +
+              s"hasIntercept: ${arimaModel.hasIntercept}\n" +
+              "ARIMA coefficients: " + arimaModel.coefficients.mkString(", "))
+
+      val monthsAheadToPredict = 24
+      val forecast = arimaModel.forecast(univariateTS, monthsAheadToPredict)
+
+      println(s"ARIMA forecast of next $monthsAheadToPredict values: "
+              + forecast.toArray.mkString(", "))
+    }
+
+    val colDataIndex = 2        // the 2nd column in the RDD is the time series for the
+                                // avg monthly wind speed at atmospheric pression 10 hPa
+
+    runARIMApredictionForAtmosphPressure(colDataIndex)
   }
 
   class LinearRenderer2DNoMajorTicks extends LinearRenderer2D {

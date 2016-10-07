@@ -24,12 +24,14 @@ concurrentRestrictions in Global += Tags.limit(Tags.Test, 1)
 
 val versions = Map(
                     "spark"    -> "1.6.2",
+                    "sparkts"    -> "0.4.0",    // Time Series Analysis for Spark
                     "deeplearning4j"    -> "0.6.0",
                     "gephi"    -> "0.9.1",
                     "jTransforms"    -> "3.1",   // for FFT
                     "twelvemonkeys"    -> "3.2.1",    // ImageIO
                     "gral-core"    -> "0.11",    // plotting
-                    "scalaArm" -> "1.4"
+                    "scalaArm" -> "1.4",
+                    "jackson-databind" -> "2.4.4"
                   )
 
 val gephiToolkitURL = "https://github.com/gephi/gephi-toolkit/releases/download/v0.9.1/gephi-toolkit-0.9.1-all.jar"
@@ -37,6 +39,7 @@ val gephiToolkitURL = "https://github.com/gephi/gephi-toolkit/releases/download/
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % versions("spark") % "provided",
   "org.apache.spark" %% "spark-mllib" % versions("spark"),
+  "com.cloudera.sparkts" % "sparkts" % versions("sparkts"),
   "org.deeplearning4j" % "deeplearning4j-core" % versions("deeplearning4j"),
   "org.deeplearning4j" % "deeplearning4j-nn" % versions("deeplearning4j"),
   "org.gephi" % "gephi-toolkit" % versions("gephi") from gephiToolkitURL,
@@ -56,6 +59,9 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "2.2.6" % "test"
 )
 
+dependencyOverrides ++= Set(
+  "com.fasterxml.jackson.core" % "jackson-databind" % versions("jackson-databind")
+)
 
 resolvers ++= Seq(
   "Netbeans Repository" at "http://bits.netbeans.org/nexus/content/groups/netbeans/",
