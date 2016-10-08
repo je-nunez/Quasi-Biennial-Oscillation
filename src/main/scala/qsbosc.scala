@@ -39,7 +39,8 @@ import org.jtransforms.fft.DoubleFFT_1D
 // Apache Spark
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.linalg.{Vector => SparkVector, DenseVector}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types.{StructType, StructField, DoubleType}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 // Cloudera's Time Series Analysis for Spark
 import com.cloudera.sparkts.models.ARIMA
@@ -171,10 +172,11 @@ object qsBOsc {
         }
       }
 
-      plotTimeSeriesByYear(dataTable, tsWS.keys.toArray.sorted)
+      val columnsLegend = tsWS.keys.toArray.sorted
+      plotTimeSeriesByYear(dataTable, columnsLegend)
 
-      val rddWindSpeeds = convertDataSource2RDD(dataTable, sparkCtxt)
-      runARIMApredictions(rddWindSpeeds)
+      val avgWindSpeedsDF = convertDataSource2DataFrame(dataTable, columnsLegend, sparkCtxt)
+      runARIMApredictions(avgWindSpeedsDF)
     }
 
   def saveDataAsCsv(dataSource: AbstractDataSource, toCsvFile: String): Unit = {
@@ -457,44 +459,63 @@ object qsBOsc {
      timeSeries.map(kv => (kv._1,kv._2.toMap)).toMap
   }
 
-  def convertDataSource2RDD(inpDataSrc: AbstractDataSource, sc: SparkContext): RDD[SparkVector] = {
+  def convertAtmosphPressureToColumnLabel(atmosphericPressure: AtmosphPressure):
+    String = s"AtmosphPressure_at_${atmosphericPressure}_hPa"
+
+  def convertDataSource2DataFrame(inpDataSrc: AbstractDataSource,
+                                  columnNames: Array[AtmosphPressure],
+                                  sc: SparkContext): DataFrame = {
 
     val numbRows = inpDataSrc.getRowCount
     val numbCols = inpDataSrc.getColumnCount
     // scalastyle:off null
-    val bufferArray = ArrayBuffer.fill[SparkVector](numbRows)(null)
+    val bufferArray = ArrayBuffer.fill[Row](numbRows)(null)
     // scalastyle:on null
 
     for { rowIdx <- 0 until numbRows } {
 
       val inputRow = inpDataSrc.getRow(rowIdx)
 
-      val rddRow = ArrayBuffer.fill[Double](numbCols)(0.0)
+      val newRow = ArrayBuffer.fill[Double](numbCols)(0.0)
 
       for { col <- 0 until numbCols } {
-        rddRow.update(col, inputRow.get(col).asInstanceOf[DoubleJava])
+        newRow.update(col, inputRow.get(col).asInstanceOf[DoubleJava])
       }
 
-      bufferArray(rowIdx) = new DenseVector(rddRow.toArray)
+      bufferArray(rowIdx) = Row.fromSeq(newRow.toSeq)
     }
 
-    val rdd = sc.parallelize(bufferArray).cache()
+    // convert the Scala ArrayBuffer to a Spark Dataframe. First declare the structure of the
+    // dataframe, ie., the name and type of each of its column (the DataFrame DDL)
+    val dfColumnNames = Array("RowIndex", "TimeYYYYMM") ++
+                          columnNames.map(
+                            atmosphPress => convertAtmosphPressureToColumnLabel(atmosphPress)
+                          )
+    val dataFrameColumnsDDL = new StructType(
+      dfColumnNames.map(colName => StructField(colName, DoubleType, nullable=false))
+    )
 
-    rdd
+    val sqlContext = new SQLContext(sc)
+    // scalastyle:off import.grouping
+    import sqlContext.implicits._
+    // scalastyle:on import.grouping
+
+    val dataFrame = sqlContext.createDataFrame(bufferArray, dataFrameColumnsDDL).cache
+    dataFrame
   }
 
-  def runARIMApredictions(windSpeedRdd: RDD[SparkVector]): Unit = {
+  def runARIMApredictions(windSpeedDF: DataFrame): Unit = {
 
     def runARIMApredictionForAtmosphPressure(rddColIndex: Int): Unit = {
 
       val univariateTS = new DenseVector(
-                               windSpeedRdd
-                                 .map( multiVariateVector => multiVariateVector(rddColIndex) )
+                               windSpeedDF
+                                 .map( multiVariateRow => multiVariateRow.getDouble(rddColIndex) )
                                  .collect
                              )
 
       // Find an ARIMA auto-fit. (We know that for lowest atmospheric pressure in the
-      // Quasi-Biennial-Oscillation, 10 hPa (colDataIndex == 2 in the RDD), the ARIMA
+      // Quasi-Biennial-Oscillation, 10 hPa (colDataIndex == 2 in the DataFrame), the ARIMA
       // hyperparameters were (4,0,1) found in R by the "forecast"'s auto.arima() method, but
       // we prefer to do an autoFit in general here, for all other atmospheric pressures in
       // the QBO.
@@ -514,7 +535,7 @@ object qsBOsc {
               + forecast.toArray.mkString(", "))
     }
 
-    val colDataIndex = 2        // the 2nd column in the RDD is the time series for the
+    val colDataIndex = 2        // the 2nd column in the DataFrame is the time series for the
                                 // avg monthly wind speed at atmospheric pression 10 hPa
 
     runARIMApredictionForAtmosphPressure(colDataIndex)
