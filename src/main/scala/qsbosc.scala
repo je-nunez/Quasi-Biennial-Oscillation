@@ -532,7 +532,7 @@ object qsBOsc {
       val forecast = arimaModel.forecast(univariateTS, monthsAheadToPredict)
 
       println(s"ARIMA forecast of next $monthsAheadToPredict values: "
-              + forecast.toArray.mkString(", "))
+              + forecast.toArray.takeRight(monthsAheadToPredict).mkString(", "))
     }
 
     val colDataIndex = 2        // the 2nd column in the DataFrame is the time series for the
