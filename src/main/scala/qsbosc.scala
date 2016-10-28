@@ -514,6 +514,9 @@ object qsBOsc {
                                  .collect
                              )
 
+      val nameARIMAmodel = windSpeedDF.columns(rddColIndex)   // the name is just a descriptive
+                                               // tag, in this case just the atmospheric pressure
+
       // Find an ARIMA auto-fit. (We know that for lowest atmospheric pressure in the
       // Quasi-Biennial-Oscillation, 10 hPa (colDataIndex == 2 in the DataFrame), the ARIMA
       // hyperparameters were (4,0,1) found in R by the "forecast"'s auto.arima() method, but
@@ -522,7 +525,8 @@ object qsBOsc {
 
       val arimaModel = ARIMA.autoFit(univariateTS)
 
-      println(s"ARIMA(${arimaModel.p}, ${arimaModel.d}, ${arimaModel.q})\n" +
+      println(s"For QBO $nameARIMAmodel: " +
+              s"ARIMA(${arimaModel.p}, ${arimaModel.d}, ${arimaModel.q})\n" +
               s"isStationary: ${arimaModel.isStationary}, " +
               s"isInvertible: ${arimaModel.isInvertible}, " +
               s"hasIntercept: ${arimaModel.hasIntercept}\n" +
@@ -531,14 +535,19 @@ object qsBOsc {
       val monthsAheadToPredict = 24
       val forecast = arimaModel.forecast(univariateTS, monthsAheadToPredict)
 
-      println(s"ARIMA forecast of next $monthsAheadToPredict values: "
-              + forecast.toArray.takeRight(monthsAheadToPredict).mkString(", "))
+      println(s"ARIMA forecast of next $monthsAheadToPredict avg speed values "
+              + s"at atmospheric pressure $nameARIMAmodel: "
+              + forecast.toArray.takeRight(monthsAheadToPredict).mkString(", ")
+              + "\n--------")
     }
 
-    val colDataIndex = 2        // the 2nd column in the DataFrame is the time series for the
-                                // avg monthly wind speed at atmospheric pression 10 hPa
-
-    runARIMApredictionForAtmosphPressure(colDataIndex)
+    // The columns 0 and 1 in the DataFrame are the row index and the time YYYYMM of the row,
+    // so the real time series of the Quasi-Biennial-Oscillation according to the atmospheric
+    // pressure start in columns 2 and after, and for them it will be found an appropiate
+    // ARIMA model and forecast:
+    for { colDataIndex <- 2 until windSpeedDF.columns.length } {
+      runARIMApredictionForAtmosphPressure(colDataIndex)
+    }
   }
 
   class LinearRenderer2DNoMajorTicks extends LinearRenderer2D {
