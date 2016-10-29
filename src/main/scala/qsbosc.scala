@@ -3,8 +3,9 @@ package mainapp
 
 import java.lang.{Double => DoubleJava}
 import java.io.{File, FileOutputStream}
+import java.text.SimpleDateFormat
 import java.util.{ArrayList => ArrayListJava, HashMap => HashMapJava, List => ListJava,
-                  Set => SetJava}
+                  Set => SetJava, Calendar}
 
 import resource.managed
 
@@ -41,6 +42,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.linalg.{Vector => SparkVector, DenseVector}
 import org.apache.spark.sql.types.{StructType, StructField, DoubleType}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.functions._
 
 // Cloudera's Time Series Analysis for Spark
 import com.cloudera.sparkts.models.ARIMA
@@ -504,9 +506,42 @@ object qsBOsc {
     dataFrame
   }
 
-  def runARIMApredictions(windSpeedDF: DataFrame): Unit = {
+  def runARIMApredictions(windSpeedDF: DataFrame): DataTable = {
 
-    def runARIMApredictionForAtmosphPressure(rddColIndex: Int): Unit = {
+    val monthsAheadToPredict = 24
+
+    def createEmptyPredictionsTable: DataTable = {
+
+      val numbColumnsDF = windSpeedDF.columns.length
+      val predictionsARIMA = new DataTable(numbColumnsDF, classOf[DoubleJava])
+
+      // get the second cell in the last row in the Spark dataframe, since this row has
+      // the last sample, and its second cell the last date YYYYMM of this sample
+      val lastYYYYMMinDF = windSpeedDF.sort(desc("RowIndex")).first.getDouble(1).toInt
+
+      val yyyymmddStr = f"${ lastYYYYMMinDF / 100 }%04d-${ lastYYYYMMinDF % 100 }%02d-01"
+      // println(s"Last date sampled in windSpeedDF: $yyyymmddStr")
+      val dateParser = new SimpleDateFormat("yyyy-MM-dd")
+      val cal = Calendar.getInstance
+      cal.setTime(dateParser.parse(yyyymmddStr))
+
+      for { month <- 0 until monthsAheadToPredict } {
+        val dataRow = ArrayBuffer.fill[DoubleJava](numbColumnsDF)(0.0)
+        dataRow(0) = month            // the first cell is the row index itself
+
+        cal.add(Calendar.MONTH, 1)    // the second cell is the forecasted year-month YYYYMM
+        var (yyyy, mm) = (cal.get(Calendar.YEAR), cal.get(Calendar.MONTH))
+        mm += 1      // the month returned by Calendar is 0-based
+        val newYYYYmmStr = f"${yyyy}%04d${mm}%02d.0"
+        dataRow(1) = newYYYYmmStr.toDouble
+
+        predictionsARIMA.add(dataRow.asJava)
+      }
+
+      predictionsARIMA
+    }
+
+    def runARIMApredictionForAtmosphPressure(rddColIndex: Int): Array[Double] = {
 
       val univariateTS = new DenseVector(
                                windSpeedDF
@@ -525,29 +560,48 @@ object qsBOsc {
 
       val arimaModel = ARIMA.autoFit(univariateTS)
 
+      /*
+      // print the hyperparameters of the ARIMA model found, the coefficients, and other properties
       println(s"For QBO $nameARIMAmodel: " +
               s"ARIMA(${arimaModel.p}, ${arimaModel.d}, ${arimaModel.q})\n" +
               s"isStationary: ${arimaModel.isStationary}, " +
               s"isInvertible: ${arimaModel.isInvertible}, " +
               s"hasIntercept: ${arimaModel.hasIntercept}\n" +
               "ARIMA coefficients: " + arimaModel.coefficients.mkString(", "))
+       */
 
-      val monthsAheadToPredict = 24
       val forecast = arimaModel.forecast(univariateTS, monthsAheadToPredict)
 
+      val predictionsNextMonths = forecast.toArray.takeRight(monthsAheadToPredict)
+
+      /*
       println(s"ARIMA forecast of next $monthsAheadToPredict avg speed values "
               + s"at atmospheric pressure $nameARIMAmodel: "
-              + forecast.toArray.takeRight(monthsAheadToPredict).mkString(", ")
-              + "\n--------")
+              + s"${predictionsNextMonths.mkString(", ")}\n--------")
+       */
+
+      predictionsNextMonths
     }
+
+    val predictionsARIMA = createEmptyPredictionsTable
 
     // The columns 0 and 1 in the DataFrame are the row index and the time YYYYMM of the row,
     // so the real time series of the Quasi-Biennial-Oscillation according to the atmospheric
     // pressure start in columns 2 and after, and for them it will be found an appropiate
     // ARIMA model and forecast:
+
     for { colDataIndex <- 2 until windSpeedDF.columns.length } {
-      runARIMApredictionForAtmosphPressure(colDataIndex)
+      val predictionsColumn = runARIMApredictionForAtmosphPressure(colDataIndex)
+
+      for { row <- 0 until predictionsColumn.length } {
+        predictionsARIMA.set(colDataIndex, row, predictionsColumn(row))
+      }
     }
+
+    val dataWriter = DataWriterFactory.getInstance().get("text/csv")
+    dataWriter.write(predictionsARIMA, System.out)
+
+    predictionsARIMA
   }
 
   class LinearRenderer2DNoMajorTicks extends LinearRenderer2D {
