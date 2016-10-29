@@ -175,10 +175,11 @@ object qsBOsc {
       }
 
       val columnsLegend = tsWS.keys.toArray.sorted
-      plotTimeSeriesByYear(dataTable, columnsLegend)
 
       val avgWindSpeedsDF = convertDataSource2DataFrame(dataTable, columnsLegend, sparkCtxt)
-      runARIMApredictions(avgWindSpeedsDF)
+      val arimaForecast = runARIMApredictions(avgWindSpeedsDF)
+
+      plotTimeSeriesByYear(dataTable, arimaForecast, columnsLegend)
     }
 
   def saveDataAsCsv(dataSource: AbstractDataSource, toCsvFile: String): Unit = {
@@ -396,15 +397,16 @@ object qsBOsc {
       // and return the plot to the caller, so the caller can re-use it for other tasks
   }
 
-  def plotTimeSeriesByYear(dataTable: DataTable, columnsLegend: Array[AtmosphPressure]): Unit = {
+  def plotTimeSeriesByYear(sampledData: DataTable, dataPredictions: DataTable,
+                           columnsLegend: Array[AtmosphPressure]): Unit = {
 
-    val axisXTickLabels = calculateCustomAxisXDateTickLabels(dataTable)
+    val axisXTickLabels = calculateCustomAxisXDateTickLabels(sampledData)
 
-    val (absMinSpeed, absMaxSpeed) = findMinimumMaxWindSpeedsInData(dataTable)
+    val (absMinSpeed, absMaxSpeed) = findMinimumMaxWindSpeedsInData(sampledData)
 
     // Plots can be re-used, so they do not need to be created at every iteration per atmospheric
     // pressure:
-    // val plot = createDefaultXYPlot(dataTable, axisXTickLabels)
+    // val plot = createDefaultXYPlot(sampledData, axisXTickLabels)
 
     val minColor = new Color(0x000000ff)
     val maxColor = new Color(0x00ff0000)  // range of colors for plotting each serie
@@ -416,7 +418,8 @@ object qsBOsc {
            val colorToPlot = GraphicsUtils.blend(minColor, maxColor,
                                                  (1.0 * colAtmosphPressure)/totalColorsNeeded)
 
-           plotAtmosphericPressureByYear(dataTable, atmosphPressure, colAtmosphPressure,
+           // TODO: pass also as argument the dataPredictions with the forecast for sampledData
+           plotAtmosphericPressureByYear(sampledData, atmosphPressure, colAtmosphPressure,
                                          axisXTickLabels, absMinSpeed, absMaxSpeed,
                                          colorToPlot)
       }
@@ -598,6 +601,7 @@ object qsBOsc {
       }
     }
 
+    println("Printing the resulting ARIMA predictions for the time-series:")
     val dataWriter = DataWriterFactory.getInstance().get("text/csv")
     dataWriter.write(predictionsARIMA, System.out)
 
