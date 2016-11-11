@@ -60,6 +60,7 @@ import org.deeplearning4j.nn.weights.WeightInit
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.dataset.DataSet
+import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.lossfunctions.LossFunctions.LossFunction
 
 import org.gephi.preview.plugin.renderers.EdgeRenderer
@@ -179,6 +180,8 @@ object qsBOsc {
       val avgWindSpeedsDF = convertDataSource2DataFrame(dataTable, columnsLegend, sparkCtxt)
       val arimaForecast = runARIMApredictions(avgWindSpeedsDF)
 
+      // TODO:
+      // val lstmForecast = runLSTMpredictions(avgWindSpeedsDF)
       plotTimeSeriesByYear(dataTable, arimaForecast, columnsLegend)
     }
 
@@ -606,6 +609,42 @@ object qsBOsc {
     dataWriter.write(predictionsARIMA, System.out)
 
     predictionsARIMA
+  }
+
+  def runLSTMpredictions(windSpeedDF: DataFrame): Unit = {
+
+    // 1st draft: a very simple LSTM
+
+    val nVarsInTimeSeries = windSpeedDF.columns.length - 2  // columns 0 and 1 are not data per-se
+
+    val pseudoRandomSeed = 120
+    Nd4j.getRandom.setSeed(pseudoRandomSeed)
+    val nIters = 1
+    val neuralNetworkConf = new NeuralNetConfiguration.Builder()
+                .seed(pseudoRandomSeed)    // Fake random seed for reproducibility of results.
+                .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT).iterations(nIters)
+                .weightInit(WeightInit.XAVIER)
+                .updater(Updater.NESTEROVS).momentum(0.9)
+                .learningRate(0.007)
+                .list()
+                .layer(0, new GravesLSTM.Builder()
+                            .activation("relu")
+                            .nIn(nVarsInTimeSeries)
+                            .nOut(10)
+                            .build()
+                      )
+                .layer(1, new RnnOutputLayer.Builder(LossFunction.MCXENT)
+                            .activation("softsign")
+                            .nIn(10)
+                            .nOut(nVarsInTimeSeries)
+                            .build()
+                      )
+                .pretrain(false).backprop(true).build()
+
+    val neuralNetwork = new MultiLayerNetwork(neuralNetworkConf)
+    neuralNetwork.init()
+
+    // TODO: .... neuralNetwork.fit(dataSet)
   }
 
   class LinearRenderer2DNoMajorTicks extends LinearRenderer2D {

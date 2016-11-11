@@ -26,6 +26,7 @@ val versions = Map(
                     "spark"    -> "1.6.2",
                     "sparkts"    -> "0.4.0",    // Time Series Analysis for Spark
                     "deeplearning4j"    -> "0.6.0",
+                    "nd4j" -> "0.6.0",
                     "gephi"    -> "0.9.1",
                     "jTransforms"    -> "3.1",   // for FFT
                     "twelvemonkeys"    -> "3.2.1",    // ImageIO
@@ -42,6 +43,7 @@ libraryDependencies ++= Seq(
   "com.cloudera.sparkts" % "sparkts" % versions("sparkts"),
   "org.deeplearning4j" % "deeplearning4j-core" % versions("deeplearning4j"),
   "org.deeplearning4j" % "deeplearning4j-nn" % versions("deeplearning4j"),
+  "org.nd4j" % "nd4j-native-platform" % versions("nd4j"),
   "org.gephi" % "gephi-toolkit" % versions("gephi") from gephiToolkitURL,
   "com.github.wendykierp" % "JTransforms" % versions("jTransforms"),
 
