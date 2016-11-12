@@ -65,7 +65,6 @@ import org.nd4j.linalg.lossfunctions.LossFunctions.LossFunction
 
 import org.gephi.preview.plugin.renderers.EdgeRenderer
 
-
 object qsBOsc {
 
   val mainPage = "http://www.geo.fu-berlin.de/en/met/ag/strat/produkte/qbo/"
@@ -614,6 +613,8 @@ object qsBOsc {
   def runLSTMpredictions(windSpeedDF: DataFrame): Unit = {
 
     // 1st draft: a very simple LSTM
+
+    ReflectionsHelper.registerUrlTypes
 
     val nVarsInTimeSeries = windSpeedDF.columns.length - 2  // columns 0 and 1 are not data per-se
 
