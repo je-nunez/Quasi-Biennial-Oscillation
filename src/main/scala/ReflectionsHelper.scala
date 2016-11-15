@@ -2,6 +2,7 @@
 package mainapp
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ListBuffer
 
 import java.lang.{Iterable => JavaIterable}
 import java.net.URL
@@ -27,9 +28,9 @@ object ReflectionsHelper {
      *
      * Reflections use of Vfs doesn't recognize these URLs and logs warns when it sees them. By registering those file endings, we supress the warns.
      */
-    def registerUrlTypes: Unit = {
+    def registerUrlTypes(): Unit = {
 
-        val urlTypes = List[Vfs.UrlType]()
+        val urlTypes = ListBuffer.empty[Vfs.UrlType]
 
         // include a list of file extensions / filenames to be recognized
         urlTypes.add(new EmptyIfFileEndingsUrlType(".mar", ".jnilib"))
@@ -37,7 +38,7 @@ object ReflectionsHelper {
         // add all other file extensions / filenames
         urlTypes.addAll(Vfs.DefaultUrlTypes.values.toList)
 
-        Vfs.setDefaultURLTypes(urlTypes)
+        Vfs.setDefaultURLTypes(urlTypes.toList)
     }
 
     private class EmptyIfFileEndingsUrlType(val fileSuffixes: String*)  extends Vfs.UrlType {
